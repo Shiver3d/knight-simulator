@@ -1,5 +1,5 @@
 import bgBorder from '../assets/border/borderBase.png';
-import bgEyes from '../assets/border/borderEyes.png';
+import bgEyes from '../assets/border/BorderEyes.png';
 
 const BorderBackground = () => {
   return (
