@@ -1,14 +1,10 @@
-import './App.css'
-import { BattleEngine } from './components/BattleEngine'
-import BorderBackground from './components/BorderBackground'
+import { BattleEngine } from './components/BattleEngine';
+import './App.css';
 
 function App() {
   return (
-    <div className="App">
-      <BorderBackground />
-      <BattleEngine />
-    </div>
-  )
+    <BattleEngine />
+  );
 }
 
-export default App
+export default App;

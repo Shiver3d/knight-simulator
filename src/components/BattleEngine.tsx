@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import battleHud from '../assets/battleHud.png';
 import soulSprite from '../assets/spriteResources/SOUL.png';
 import trkSprite from '../assets/spriteResources/TRK.png';
+import BorderBackground from './BorderBackground';
 
 interface PlayerState {
   x: number;
@@ -99,10 +100,12 @@ export const BattleEngine: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const keysRef = useRef<Record<string, boolean>>({});
 
+  const [displayHp, setDisplayHp] = useState(100);
+
   const playerRef = useRef<PlayerState>({
     x: 320,
     y: 240,
-    speed: 1.5,
+    speed: 2,
     coreRadius: 6,
     grazeRadius: 25,
     hp: 100,
@@ -418,6 +421,11 @@ export const BattleEngine: React.FC = () => {
 
           if (distance < player.coreRadius + b.radius) {
             player.hp -= 10;
+
+            if (player.hp < 0) {
+              player.hp = 0;
+            }
+
             bullets.splice(i, 1);
             continue;
           }
@@ -462,6 +470,11 @@ export const BattleEngine: React.FC = () => {
 
           if (coreHit) {
             player.hp -= 10;
+
+            if (player.hp < 0) {
+              player.hp = 0;
+            }
+
             return;
           }
 
@@ -483,6 +496,8 @@ export const BattleEngine: React.FC = () => {
           }
         });
       }
+
+      setDisplayHp(player.hp);
     };
 
     const render = (
@@ -603,6 +618,8 @@ export const BattleEngine: React.FC = () => {
 
   return (
     <div style={styles.container}>
+      <BorderBackground hp={displayHp} />
+
       <canvas
         ref={canvasRef}
         width={1200}
@@ -615,15 +632,19 @@ export const BattleEngine: React.FC = () => {
 
 const styles = {
   container: {
+    position: 'relative' as const,
     display: 'flex',
     flexDirection: 'column' as const,
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
     backgroundColor: '#000',
+    overflow: 'hidden',
   },
   canvas: {
     backgroundColor: '#000',
+    position: 'relative' as const,
+    zIndex: 1,
   },
 };
 
