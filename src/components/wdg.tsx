@@ -13,7 +13,7 @@ const DIALOG_LINES = [
 	'THEN, SHALL WE HASTEN?'
 ];
 
-const GIVE_UP_TEXT = 'Then, the world were covered in darkness...';
+const GIVE_UP_TEXT = 'Thus, the world was covered in darkness...';
 
 interface WdgProps {
 	onRetry: () => void;

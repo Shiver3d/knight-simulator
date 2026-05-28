@@ -78,7 +78,7 @@ const preloadFont = (src: string) =>
 			font
 				.load()
 				.then((loadedFont) => {
-					document.fonts.add(loadedFont);
+					(document as any).fonts.add(loadedFont);
 					return document.fonts.load(`16px ${familyName}`);
 				})
 				.then(() => resolve())

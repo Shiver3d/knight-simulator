@@ -10,7 +10,6 @@ interface PlayerState {
   speed: number;
   coreRadius: number;
   grazeRadius: number;
-  hp: number;
   tp: number;
 }
 
@@ -31,6 +30,25 @@ interface BoxDimensions {
 }
 
 type Scene = 1 | 2;
+
+type BattlePhase = 'command' | 'enemy';
+
+type ActionName = 'FIGHT' | 'ACT' | 'ITEM' | 'SPARE' | 'DEFEND' | 'MAGIC';
+
+const COMMAND_ACTIONS: ActionName[] = ['FIGHT', 'ACT', 'ITEM', 'SPARE', 'DEFEND', 'MAGIC'];
+
+const COMMAND_MENU = {
+  x: 24,
+  y: 726,
+  width: 540,
+  height: 146,
+  padding: 14,
+  buttonWidth: 76,
+  buttonHeight: 34,
+  buttonGap: 8,
+} as const;
+
+const ENEMY_PHASE_DURATION_MS = 9000;
 
 type Scene2Shape =
   | { kind: 'circle'; x: number; y: number; radius: number }
@@ -77,6 +95,73 @@ const HUD_SPRITE = {
   width: 640,
   height: 480,
 };
+
+/** Slots (grades azuis) no layout de batalha — coordenadas relativas ao recorte HUD 640×480 */
+const BATTLE_HUD_SLOTS = [
+  { id: 'slot1', x: 0, y: 327, width: 212, height: 36 },
+  { id: 'slot2', x: 213, y: 327, width: 211, height: 36 },
+  { id: 'slot3', x: 425, y: 327, width: 211, height: 36 },
+] as const;
+
+/** Sprites simples (só HP) na coluna EN do battleHud.png */
+const CHARACTER_HUD_SPRITES = {
+  KRIS: { x: 690, y: 281, width: 213, height: 34 },
+  SUSIE: { x: 690, y: 354, width: 213, height: 34 },
+  RALSEI: { x: 690, y: 427, width: 213, height: 34 },
+  NOELLE: { x: 690, y: 500, width: 213, height: 34 },
+} as const;
+
+/** Áreas dinâmicas dentro de cada painel 213×34 (transparentes na máscara) */
+const HP_BAR_REL = { x: 128, y: 19, width: 76, height: 9 };
+const HP_TEXT_REL = { x: 118, y: 4, width: 92, height: 14 };
+
+/** Bordas laterais do sprite — mascaradas; desenhadas em runtime no turno do personagem */
+const TURN_BORDER_WIDTH = 2;
+
+const HP_BAR_EMPTY = '#7F0001';
+
+/** Margem acima dos slots da party — balas não entram na HUD */
+const BULLET_HUD_MARGIN = 4;
+
+type CharacterId = keyof typeof CHARACTER_HUD_SPRITES;
+
+type CharacterActionState = Record<CharacterId, ActionName | null>;
+
+function createEmptyActionState(): CharacterActionState {
+  return {
+    KRIS: null,
+    SUSIE: null,
+    RALSEI: null,
+    NOELLE: null,
+  };
+}
+
+/** Cor assinatura (barra de HP e borda de turno) */
+const CHARACTER_SIGNATURE_COLORS: Record<CharacterId, string> = {
+  KRIS: '#00FFFF',
+  SUSIE: '#FF00FF',
+  RALSEI: '#00FF00',
+  NOELLE: '#FFFF00',
+};
+
+interface PartyMember {
+  id: CharacterId;
+  name: string;
+  atk: number;
+  def: number;
+  maxHp: number;
+  hp: number;
+}
+
+const INITIAL_PARTY: PartyMember[] = [
+  { id: 'KRIS', name: 'KRIS', atk: 10, def: 10, maxHp: 90, hp: 90 },
+  { id: 'SUSIE', name: 'SUSIE', atk: 12, def: 6, maxHp: 90, hp: 90 },
+  { id: 'RALSEI', name: 'RALSEI', atk: 8, def: 8, maxHp: 70, hp: 70 },
+  { id: 'NOELLE', name: 'NOELLE', atk: 10, def: 2, maxHp: 80, hp: 80 },
+];
+
+/** Três personagens visíveis nos slots da batalha (ordem: esquerda → direita) */
+const ACTIVE_BATTLE_PARTY: CharacterId[] = ['KRIS', 'SUSIE', 'RALSEI'];
 
 const TP_BAR_RECT = {
   x: 38,
@@ -146,7 +231,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const keysRef = useRef<Record<string, boolean>>({});
 
-  const [displayHp, setDisplayHp] = useState(100);
+  const [displayHp, setDisplayHp] = useState(90);
 
   const playerRef = useRef<PlayerState>({
     x: 320,
@@ -154,7 +239,6 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
     speed: debugSettings.playerSpeed,
     coreRadius: debugSettings.coreRadius,
     grazeRadius: debugSettings.grazeRadius,
-    hp: 100,
     tp: 0,
   });
 
@@ -163,6 +247,15 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
   const spriteImageRef = useRef<HTMLImageElement | null>(null);
   const trkImageRef = useRef<HTMLImageElement | null>(null);
   const hudMaskRef = useRef<HTMLCanvasElement | null>(null);
+  const hudImageRef = useRef<HTMLImageElement | null>(null);
+  const characterHudMasksRef = useRef<Partial<Record<CharacterId, HTMLCanvasElement>>>({});
+  const partyRef = useRef<PartyMember[]>(INITIAL_PARTY.map((m) => ({ ...m })));
+  const activeTurnCharacterRef = useRef<CharacterId | null>(null);
+  const battlePhaseRef = useRef<BattlePhase>('command');
+  const selectedActionIndexRef = useRef(0);
+  const activePartyTurnIndexRef = useRef(0);
+  const partyActionsRef = useRef<CharacterActionState>(createEmptyActionState());
+  const enemyPhaseStartRef = useRef(0);
   const backgroundImagesRef = useRef<HTMLImageElement[]>([]);
   const backgroundFrameRef = useRef(0);
   const backgroundTimeRef = useRef(0);
@@ -185,6 +278,21 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
     }
   };
 
+  const resetBattleCommandState = () => {
+    battlePhaseRef.current = 'command';
+    selectedActionIndexRef.current = 0;
+    activePartyTurnIndexRef.current = 0;
+    partyActionsRef.current = createEmptyActionState();
+    enemyPhaseStartRef.current = 0;
+    activeTurnCharacterRef.current = ACTIVE_BATTLE_PARTY[0];
+  };
+
+  const beginEnemyPhase = (time: number) => {
+    battlePhaseRef.current = 'enemy';
+    enemyPhaseStartRef.current = time;
+    activeTurnCharacterRef.current = null;
+  };
+
   const setSceneValue = (next: Scene) => {
     if (sceneRef.current === next) return;
 
@@ -192,6 +300,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
     bulletsRef.current = [];
     spawnTimerRef.current = 0;
     scene2GrazedRef.current = new Set();
+    resetBattleCommandState();
     centerPlayer(next);
   };
 
@@ -209,6 +318,52 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         setSceneValue(1);
       } else if (e.key === '2') {
         setSceneValue(2);
+      }
+
+      if (battlePhaseRef.current === 'command') {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+        }
+
+        if (e.key === 'ArrowLeft') {
+          selectedActionIndexRef.current =
+            (selectedActionIndexRef.current + COMMAND_ACTIONS.length - 1) % COMMAND_ACTIONS.length;
+          return;
+        }
+
+        if (e.key === 'ArrowRight') {
+          selectedActionIndexRef.current =
+            (selectedActionIndexRef.current + 1) % COMMAND_ACTIONS.length;
+          return;
+        }
+
+        if (e.key === 'Enter' || e.key === ' ') {
+          const currentCharacter = ACTIVE_BATTLE_PARTY[activePartyTurnIndexRef.current];
+
+          if (!currentCharacter) {
+            return;
+          }
+
+          const selectedAction = COMMAND_ACTIONS[selectedActionIndexRef.current];
+          partyActionsRef.current = {
+            ...partyActionsRef.current,
+            [currentCharacter]: selectedAction,
+          };
+
+          const nextIndex = activePartyTurnIndexRef.current + 1;
+
+          if (nextIndex >= ACTIVE_BATTLE_PARTY.length) {
+            beginEnemyPhase(performance.now());
+          } else {
+            activePartyTurnIndexRef.current = nextIndex;
+            selectedActionIndexRef.current = 0;
+            activeTurnCharacterRef.current = ACTIVE_BATTLE_PARTY[nextIndex];
+          }
+
+          return;
+        }
+
+        return;
       }
 
       keysRef.current[e.key] = true;
@@ -248,6 +403,8 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
     img.src = battleHud;
 
     img.onload = () => {
+      hudImageRef.current = img;
+
       const mask = document.createElement('canvas');
       mask.width = HUD_SPRITE.width;
       mask.height = HUD_SPRITE.height;
@@ -277,16 +434,69 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         const g = data[i + 1];
         const b = data[i + 2];
 
-        const isLightBlue = r <= 10 && g >= 140 && g <= 170 && b >= 240;
-        const isTpBlue = r <= 10 && g <= 60 && b >= 240;
-
-        if (isLightBlue || isTpBlue) {
+        if (isHudPlaceholderPixel(r, g, b)) {
           data[i + 3] = 0;
         }
       }
 
       maskCtx.putImageData(imageData, 0, 0);
       hudMaskRef.current = mask;
+
+      const masks: Partial<Record<CharacterId, HTMLCanvasElement>> = {};
+      for (const id of Object.keys(CHARACTER_HUD_SPRITES) as CharacterId[]) {
+        const sprite = CHARACTER_HUD_SPRITES[id];
+        const panel = document.createElement('canvas');
+        panel.width = sprite.width;
+        panel.height = sprite.height;
+
+        const panelCtx = panel.getContext('2d');
+        if (!panelCtx) continue;
+
+        panelCtx.imageSmoothingEnabled = false;
+        panelCtx.drawImage(
+          img,
+          sprite.x,
+          sprite.y,
+          sprite.width,
+          sprite.height,
+          0,
+          0,
+          sprite.width,
+          sprite.height
+        );
+
+        const panelData = panelCtx.getImageData(0, 0, panel.width, panel.height);
+        const panelPixels = panelData.data;
+
+        for (let py = 0; py < sprite.height; py++) {
+          for (let px = 0; px < sprite.width; px++) {
+            const inBar =
+              px >= HP_BAR_REL.x &&
+              px < HP_BAR_REL.x + HP_BAR_REL.width &&
+              py >= HP_BAR_REL.y &&
+              py < HP_BAR_REL.y + HP_BAR_REL.height;
+
+            const inText =
+              px >= HP_TEXT_REL.x &&
+              px < HP_TEXT_REL.x + HP_TEXT_REL.width &&
+              py >= HP_TEXT_REL.y &&
+              py < HP_TEXT_REL.y + HP_TEXT_REL.height;
+
+            const inTurnBorder =
+              px < TURN_BORDER_WIDTH || px >= sprite.width - TURN_BORDER_WIDTH;
+
+            if (inBar || inText || inTurnBorder) {
+              const i = (py * sprite.width + px) * 4;
+              panelPixels[i + 3] = 0;
+            }
+          }
+        }
+
+        panelCtx.putImageData(panelData, 0, 0);
+        masks[id] = panel;
+      }
+
+      characterHudMasksRef.current = masks;
     };
   }, []);
 
@@ -364,6 +574,74 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       ctxL.fill();
     };
 
+    const drawPartyHud = (
+      ctxL: CanvasRenderingContext2D,
+      scaleX: number,
+      scaleY: number
+    ) => {
+      const party = partyRef.current;
+      const masks = characterHudMasksRef.current;
+
+      ACTIVE_BATTLE_PARTY.forEach((charId, slotIndex) => {
+        const slot = BATTLE_HUD_SLOTS[slotIndex];
+        const member = party.find((m) => m.id === charId);
+        const panel = masks?.[charId];
+
+        if (!slot || !member || !panel) return;
+
+        const destX = slot.x * scaleX;
+        const destY = slot.y * scaleY;
+        const destW = slot.width * scaleX;
+        const destH = slot.height * scaleY;
+
+        ctxL.drawImage(panel, destX, destY, destW, destH);
+
+        const barX = destX + (HP_BAR_REL.x / panel.width) * destW;
+        const barY = destY + (HP_BAR_REL.y / panel.height) * destH;
+        const barW = (HP_BAR_REL.width / panel.width) * destW;
+        const barH = (HP_BAR_REL.height / panel.height) * destH;
+        const hpRatio = Math.min(1, Math.max(0, member.hp / member.maxHp));
+
+        if (barW > 0 && barH > 0) {
+          ctxL.fillStyle = HP_BAR_EMPTY;
+          ctxL.fillRect(barX, barY, barW, barH);
+
+          const fillW = barW * hpRatio;
+          if (fillW > 0) {
+            ctxL.fillStyle = CHARACTER_SIGNATURE_COLORS[charId];
+            ctxL.fillRect(barX, barY, fillW, barH);
+          }
+        }
+
+        const textX = destX + ((HP_TEXT_REL.x + HP_TEXT_REL.width) / panel.width) * destW;
+        const textY = destY + ((HP_TEXT_REL.y + HP_TEXT_REL.height / 2) / panel.height) * destH;
+        const fontSize = Math.max(8, Math.floor(11 * scaleY));
+        const hpLabel = `${member.hp} / ${member.maxHp}`;
+
+        ctxL.save();
+        ctxL.font = `${fontSize}px Determination`;
+        ctxL.textAlign = 'right';
+        ctxL.textBaseline = 'middle';
+        ctxL.strokeStyle = '#000000';
+        ctxL.lineWidth = Math.max(1, scaleX);
+        ctxL.strokeText(hpLabel, textX, textY);
+        ctxL.fillStyle = '#ffffff';
+        ctxL.fillText(hpLabel, textX, textY);
+        ctxL.restore();
+
+        if (activeTurnCharacterRef.current === charId) {
+          drawTurnBorderHighlight(
+            ctxL,
+            destX,
+            destY,
+            destW,
+            destH,
+            CHARACTER_SIGNATURE_COLORS[charId],
+          );
+        }
+      });
+    };
+
     const drawTrkIdleSword = (
       ctxL: CanvasRenderingContext2D,
       time: number
@@ -430,18 +708,50 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       );
     };
 
+    const getKrisHp = () => {
+      const kris = partyRef.current.find((m) => m.id === 'KRIS');
+      return kris?.hp ?? 0;
+    };
+
+    const damageKris = (amount: number) => {
+      const kris = partyRef.current.find((m) => m.id === 'KRIS');
+      if (!kris) return;
+
+      kris.hp = Math.max(0, kris.hp - amount);
+    };
+
     const update = (deltaMs: number, time: number) => {
       const player = playerRef.current;
       const settings = debugSettingsRef.current;
       const enemySpeed = settings.enemySpeed;
       const box = getBox();
       const currentScene = sceneRef.current;
+      const currentBattlePhase = battlePhaseRef.current;
 
       player.speed = settings.playerSpeed;
       player.coreRadius = settings.coreRadius;
       player.grazeRadius = settings.grazeRadius;
 
       updateBackground(deltaMs);
+
+      if (currentBattlePhase === 'enemy' && enemyPhaseStartRef.current > 0) {
+        if (time - enemyPhaseStartRef.current >= ENEMY_PHASE_DURATION_MS) {
+          bulletsRef.current = [];
+          spawnTimerRef.current = 0;
+          scene2GrazedRef.current = new Set();
+          invulnUntilRef.current = 0;
+          lastGrazeTimeRef.current = -Infinity;
+          resetBattleCommandState();
+          centerPlayer(currentScene);
+          setDisplayHp(getKrisHp());
+          return;
+        }
+      }
+
+      if (currentBattlePhase === 'command') {
+        setDisplayHp(getKrisHp());
+        return;
+      }
 
       if (keysRef.current['ArrowUp'] || keysRef.current['w'] || keysRef.current['W']) {
         player.y -= player.speed;
@@ -498,12 +808,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
             if (time < invulnUntilRef.current) {
               continue;
             }
-            player.hp -= 10;
-
-            if (player.hp < 0) {
-              player.hp = 0;
-            }
-
+            damageKris(10);
             invulnUntilRef.current = time + 1000;
 
             bullets.splice(i, 1);
@@ -521,7 +826,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
             lastGrazeTimeRef.current = time;
           }
 
-          if (b.y > VIRTUAL_CANVAS_SIZE.height + 20) {
+          if (b.y - b.radius > getBulletHudCeilingY()) {
             bullets.splice(i, 1);
           }
         }
@@ -554,12 +859,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
             if (time < invulnUntilRef.current) {
               return;
             }
-            player.hp -= 10;
-
-            if (player.hp < 0) {
-              player.hp = 0;
-            }
-
+            damageKris(10);
             invulnUntilRef.current = time + 3000;
 
             return;
@@ -586,7 +886,89 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         });
       }
 
-      setDisplayHp(player.hp);
+      setDisplayHp(getKrisHp());
+    };
+
+    const drawActionMenu = (ctxL: CanvasRenderingContext2D) => {
+      const phase = battlePhaseRef.current;
+      const selectedActionIndex = selectedActionIndexRef.current;
+      const activePartyIndex = Math.min(
+        activePartyTurnIndexRef.current,
+        ACTIVE_BATTLE_PARTY.length - 1
+      );
+      const activeCharacter = ACTIVE_BATTLE_PARTY[activePartyIndex] ?? null;
+      const menuX = COMMAND_MENU.x;
+      const menuY = COMMAND_MENU.y;
+      const menuWidth = COMMAND_MENU.width;
+      const menuHeight = COMMAND_MENU.height;
+      const innerX = menuX + COMMAND_MENU.padding;
+      const buttonY = menuY + 34;
+      const summaryY = buttonY + COMMAND_MENU.buttonHeight + 20;
+      const actions = partyActionsRef.current;
+
+      ctxL.save();
+      ctxL.fillStyle = '#000000';
+      ctxL.fillRect(menuX, menuY, menuWidth, menuHeight);
+      ctxL.strokeStyle = phase === 'command' ? '#FFFFFF' : '#666666';
+      ctxL.lineWidth = 2;
+      ctxL.strokeRect(menuX, menuY, menuWidth, menuHeight);
+
+      ctxL.fillStyle = '#FFFFFF';
+      ctxL.font = '14px Determination';
+      ctxL.textAlign = 'left';
+      ctxL.textBaseline = 'top';
+      ctxL.fillText(
+        phase === 'command'
+          ? `TURN: ${activeCharacter ?? 'WAIT'}`
+          : 'ENEMY ATTACK',
+        menuX + COMMAND_MENU.padding,
+        menuY + 10
+      );
+
+      ctxL.font = '12px Determination';
+      COMMAND_ACTIONS.forEach((action, index) => {
+        const buttonX = innerX + index * (COMMAND_MENU.buttonWidth + COMMAND_MENU.buttonGap);
+        const isSelected = phase === 'command' && index === selectedActionIndex;
+
+        ctxL.fillStyle = isSelected ? '#4A4300' : '#111111';
+        ctxL.fillRect(buttonX, buttonY, COMMAND_MENU.buttonWidth, COMMAND_MENU.buttonHeight);
+        ctxL.strokeStyle = isSelected ? '#FBFF0D' : '#FF9A1F';
+        ctxL.lineWidth = isSelected ? 3 : 2;
+        ctxL.strokeRect(buttonX, buttonY, COMMAND_MENU.buttonWidth, COMMAND_MENU.buttonHeight);
+
+        ctxL.fillStyle = isSelected ? '#FBFF0D' : '#FFFFFF';
+        ctxL.textAlign = 'center';
+        ctxL.textBaseline = 'middle';
+        ctxL.fillText(
+          action,
+          buttonX + COMMAND_MENU.buttonWidth / 2,
+          buttonY + COMMAND_MENU.buttonHeight / 2 + 0.5
+        );
+
+        if (isSelected) {
+          ctxL.font = '11px Determination';
+          ctxL.fillStyle = '#FBFF0D';
+          ctxL.textBaseline = 'top';
+          ctxL.fillText(action, buttonX + COMMAND_MENU.buttonWidth / 2, buttonY + COMMAND_MENU.buttonHeight + 4);
+          ctxL.font = '12px Determination';
+        }
+      });
+
+      ctxL.textAlign = 'left';
+      ctxL.textBaseline = 'top';
+      ctxL.font = '11px Determination';
+
+      ACTIVE_BATTLE_PARTY.forEach((charId, index) => {
+        const action = actions[charId];
+        const statusX = menuX + COMMAND_MENU.padding + index * 168;
+        const statusY = summaryY + Math.floor(index / 2) * 16;
+        const isCurrent = phase === 'command' && charId === activeCharacter;
+
+        ctxL.fillStyle = action ? '#FBFF0D' : isCurrent ? '#FFFFFF' : '#8A8A8A';
+        ctxL.fillText(`${charId}: ${action ?? 'PENDING'}`, statusX, statusY);
+      });
+
+      ctxL.restore();
     };
 
     const render = (
@@ -725,13 +1107,22 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
 
       ctxL.fillStyle = '#fff';
 
-      if (currentScene === 1) {
+      if (currentScene === 1 && battlePhaseRef.current === 'enemy') {
+        const bulletCeiling = getBulletHudCeilingY();
+
+        ctxL.save();
+        ctxL.beginPath();
+        ctxL.rect(0, 0, VIRTUAL_CANVAS_SIZE.width, bulletCeiling);
+        ctxL.clip();
+
         for (const b of bulletsRef.current) {
           ctxL.beginPath();
           ctxL.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
           ctxL.fill();
         }
-      } else {
+
+        ctxL.restore();
+      } else if (battlePhaseRef.current === 'enemy') {
         for (const shape of SCENE2_SHAPES) {
           drawScene2Shape(ctxL, shape);
         }
@@ -743,6 +1134,10 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       if (hudMaskAfter) {
         ctxL.drawImage(hudMaskAfter, 0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
       }
+
+      drawPartyHud(ctxL, hudScaleX, hudScaleY);
+
+      drawActionMenu(ctxL);
 
       if (debugEnabledRef.current) {
         ctxL.save();
@@ -835,19 +1230,61 @@ const styles = {
   },
 };
 
-function getBox(): BoxDimensions {
-  const x = (VIRTUAL_CANVAS_SIZE.width - BOX_SIZE.width) / 2;
-  const y = (VIRTUAL_CANVAS_SIZE.height - BOX_SIZE.height) / 2;
+function getHudScale() {
   return {
-    x,
-    y,
-    width: BOX_SIZE.width,
-    height: BOX_SIZE.height,
+    x: VIRTUAL_CANVAS_SIZE.width / HUD_SPRITE.width,
+    y: VIRTUAL_CANVAS_SIZE.height / HUD_SPRITE.height,
   };
+}
+
+function getPartyHudTopY() {
+  const hudScale = getHudScale();
+  return BATTLE_HUD_SLOTS[0].y * hudScale.y;
+}
+
+function getBulletHudCeilingY() {
+  return getPartyHudTopY() - BULLET_HUD_MARGIN;
+}
+
+function getBox(): BoxDimensions {
+  const hudScale = getHudScale();
+  const partyHudTop = getPartyHudTopY();
+  const topMargin = 48 * hudScale.y;
+  const bottomMargin = 10 * hudScale.y;
+  const maxBottom = partyHudTop - bottomMargin;
+  const availableHeight = maxBottom - topMargin;
+  const height = Math.min(BOX_SIZE.height, Math.floor(availableHeight));
+  const width = BOX_SIZE.width;
+  const x = (VIRTUAL_CANVAS_SIZE.width - width) / 2;
+  const y = topMargin + (availableHeight - height) / 2;
+
+  return { x, y, width, height };
+}
+
+/** Borda colorida do turno ativo — chamar quando a fila de ações existir */
+function drawTurnBorderHighlight(
+  ctx: CanvasRenderingContext2D,
+  destX: number,
+  destY: number,
+  destW: number,
+  destH: number,
+  color: string,
+) {
+  const borderW = Math.max(TURN_BORDER_WIDTH, Math.round(TURN_BORDER_WIDTH * (destW / 213)));
+
+  ctx.fillStyle = color;
+  ctx.fillRect(destX, destY, borderW, destH);
+  ctx.fillRect(destX + destW - borderW, destY, borderW, destH);
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isHudPlaceholderPixel(r: number, g: number, b: number) {
+  const isLightBlue = r <= 10 && g >= 140 && g <= 170 && b >= 240;
+  const isTpBlue = r <= 10 && g <= 60 && b >= 240;
+  return isLightBlue || isTpBlue;
 }
 
 function circleIntersectsCircle(
