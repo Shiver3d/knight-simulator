@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { BattleEngine } from './components/BattleEngine';
 import Loading from './components/Loading';
 import DebugMenu from './components/DebugMenu.tsx';
@@ -31,6 +31,9 @@ function App() {
   const audioHandleRef = useRef<LoopingAudioHandle | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const startSlotRef = useRef<number | null>(null);
+  const handleReady = useCallback(() => {
+    setIsReady(true);
+  }, []);
 
   const resetBattleState = () => {
     setInBattle(false);
@@ -108,7 +111,7 @@ function App() {
   };
 
   if (!isReady) {
-    return <Loading onReady={() => setIsReady(true)} />;
+    return <Loading onReady={handleReady} />;
   }
 
   if (inBattle) {

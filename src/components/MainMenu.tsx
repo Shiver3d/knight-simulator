@@ -214,7 +214,7 @@ const styles = {
 		position: 'absolute' as const,
 		left: 20,
 		top: 12,
-		fontSize: '18px',
+		fontSize: '22px',
 		letterSpacing: '0.5px',
 	},
 	centerColumn: {
@@ -254,12 +254,12 @@ const styles = {
 	saveTitle: {
 		flex: 1,
 		color: '#00ff00',
-		fontSize: '24px',
+		fontSize: '30px',
 		fontWeight: 700,
 	},
 	saveTime: {
 		color: '#00ff00',
-		fontSize: '20px',
+		fontSize: '24px',
 		marginRight: '40px',
 		textAlign: 'center' as const,
 	},
@@ -267,6 +267,7 @@ const styles = {
 		color: '#00ff00',
 		marginTop: '8px',
 		marginLeft: '37px',
+		fontSize: '22px',
 	},
 	optionsRow: {
 		display: 'flex',
@@ -300,18 +301,18 @@ const styles = {
 		imageRendering: 'pixelated' as const,
 	},
 	optionText: {
-		fontSize: '16px',
+		fontSize: '20px',
 	},
 	optionValue: {
 		marginLeft: '32px',
 		marginTop: '6px',
-		fontSize: '18px',
+		fontSize: '22px',
 	},
 	alphaLabel: {
 		position: 'absolute' as const,
 		right: '20px',
 		bottom: '12px',
-		fontSize: '12px',
+		fontSize: '16px',
 	},
 };
 

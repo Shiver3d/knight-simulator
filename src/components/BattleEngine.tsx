@@ -102,6 +102,13 @@ const BOX_SIZE = {
   height: 200,
 };
 
+const VIRTUAL_CANVAS_SIZE = {
+  width: 1200,
+  height: 900,
+};
+
+const MAX_DPR = 2;
+
 const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   coreRadius: 6,
   grazeRadius: 25,
@@ -168,16 +175,13 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
   const debugSettingsRef = useRef<DebugSettings>(debugSettings);
 
   const centerPlayer = (scene: Scene) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     if (scene === 1) {
-      const box = getBox(canvas);
+      const box = getBox();
       playerRef.current.x = box.x + box.width / 2;
       playerRef.current.y = box.y + box.height / 2;
     } else {
-      playerRef.current.x = canvas.width / 2;
-      playerRef.current.y = canvas.height / 2;
+      playerRef.current.x = VIRTUAL_CANVAS_SIZE.width / 2;
+      playerRef.current.y = VIRTUAL_CANVAS_SIZE.height / 2;
     }
   };
 
@@ -362,7 +366,6 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
 
     const drawTrkIdleSword = (
       ctxL: CanvasRenderingContext2D,
-      canvasElement: HTMLCanvasElement,
       time: number
     ) => {
       const sprite = trkImageRef.current;
@@ -375,16 +378,16 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       const drawW = TRK_IDLE_SWORD_SPRITE.width * scale;
       const drawH = TRK_IDLE_SWORD_SPRITE.height * scale;
 
-      const baseX = canvasElement.width - drawW - 24;
+      const baseX = VIRTUAL_CANVAS_SIZE.width - drawW - 24;
       const baseY = 250;
 
       const drawX = baseX;
       const drawY = baseY + bobY;
 
-      const afterCount = 10;
-      const span = 90;
+      const afterCount = 20;
+      const span = -10;
       const spacing = 7;
-      const speed = 40;
+      const speed = 20;
       const phase = (t * speed) % span;
 
       ctxL.save();
@@ -427,11 +430,11 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       );
     };
 
-    const update = (deltaMs: number, canvasElement: HTMLCanvasElement, time: number) => {
+    const update = (deltaMs: number, time: number) => {
       const player = playerRef.current;
       const settings = debugSettingsRef.current;
       const enemySpeed = settings.enemySpeed;
-      const box = getBox(canvasElement);
+      const box = getBox();
       const currentScene = sceneRef.current;
 
       player.speed = settings.playerSpeed;
@@ -518,7 +521,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
             lastGrazeTimeRef.current = time;
           }
 
-          if (b.y > canvasElement.height + 20) {
+          if (b.y > VIRTUAL_CANVAS_SIZE.height + 20) {
             bullets.splice(i, 1);
           }
         }
@@ -527,16 +530,16 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
           player.x = player.coreRadius;
         }
 
-        if (player.x > canvasElement.width - player.coreRadius) {
-          player.x = canvasElement.width - player.coreRadius;
+        if (player.x > VIRTUAL_CANVAS_SIZE.width - player.coreRadius) {
+          player.x = VIRTUAL_CANVAS_SIZE.width - player.coreRadius;
         }
 
         if (player.y < player.coreRadius) {
           player.y = player.coreRadius;
         }
 
-        if (player.y > canvasElement.height - player.coreRadius) {
-          player.y = canvasElement.height - player.coreRadius;
+        if (player.y > VIRTUAL_CANVAS_SIZE.height - player.coreRadius) {
+          player.y = VIRTUAL_CANVAS_SIZE.height - player.coreRadius;
         }
 
         SCENE2_SHAPES.forEach((shape, index) => {
@@ -588,15 +591,14 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
 
     const render = (
       ctxL: CanvasRenderingContext2D,
-      canvasElement: HTMLCanvasElement,
       time: number
     ) => {
       const player = playerRef.current;
       const sprite = spriteImageRef.current;
       const currentScene = sceneRef.current;
-      const box = getBox(canvasElement);
-      const hudScaleX = canvasElement.width / HUD_SPRITE.width;
-      const hudScaleY = canvasElement.height / HUD_SPRITE.height;
+      const box = getBox();
+      const hudScaleX = VIRTUAL_CANVAS_SIZE.width / HUD_SPRITE.width;
+      const hudScaleY = VIRTUAL_CANVAS_SIZE.height / HUD_SPRITE.height;
       const grazeElapsed = time - lastGrazeTimeRef.current;
       let grazeAlpha = 0;
 
@@ -609,11 +611,11 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         }
       }
 
-      ctxL.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      ctxL.clearRect(0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
       ctxL.imageSmoothingEnabled = false;
 
       ctxL.fillStyle = '#000';
-      ctxL.fillRect(0, 0, canvasElement.width, canvasElement.height);
+      ctxL.fillRect(0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
 
       const backgroundFrames = backgroundImagesRef.current;
 
@@ -621,13 +623,13 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         const bg = backgroundFrames[backgroundFrameRef.current];
 
         if (bg && bg.complete) {
-          ctxL.drawImage(bg, 0, 0, canvasElement.width, canvasElement.height);
+          ctxL.drawImage(bg, 0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
         }
       }
 
       const hudMask = hudMaskRef.current;
       if (hudMask) {
-        ctxL.drawImage(hudMask, 0, 0, canvasElement.width, canvasElement.height);
+        ctxL.drawImage(hudMask, 0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
       }
 
       const barInset = Math.max(2, Math.round(2 * hudScaleX));
@@ -653,19 +655,23 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         }
       }
 
-      const tpText = player.tp >= 100 ? 'MAX' : `${Math.round(player.tp)}`;
+      const isTpMax = player.tp >= 100;
+      const tpText = isTpMax ? 'MAX' : `${Math.round(player.tp)}`;
       const tpX = (TP_VALUE_RECT.x + TP_VALUE_RECT.width / 2) * hudScaleX;
       const tpY = (TP_VALUE_RECT.y + TP_VALUE_RECT.height / 2) * hudScaleY;
-      const tpFontSize = Math.max(10, Math.floor(TP_VALUE_RECT.height * hudScaleY * 1.05));
+      const tpFontSize = Math.max(
+        10,
+        Math.floor(TP_VALUE_RECT.height * hudScaleY * (isTpMax ? 0.78 : 1.05)),
+      );
 
       ctxL.save();
-      ctxL.font = `${tpFontSize}px PixelOperator8`;
+      ctxL.font = `${tpFontSize}px Determination`;
       ctxL.textAlign = 'center';
       ctxL.textBaseline = 'middle';
       ctxL.strokeStyle = '#000000';
       ctxL.lineWidth = Math.max(1, hudScaleX);
       ctxL.strokeText(tpText, tpX, tpY);
-      ctxL.fillStyle = '#FAA743';
+      ctxL.fillStyle = isTpMax ? '#FAA743' : '#ffffff';
       ctxL.fillText(tpText, tpX, tpY);
       ctxL.restore();
 
@@ -678,7 +684,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         ctxL.strokeRect(box.x, box.y, box.width, box.height);
       }
 
-      drawTrkIdleSword(ctxL, canvasElement, time);
+      drawTrkIdleSword(ctxL, time);
 
       if (sprite) {
         const grazeSize = player.grazeRadius * 2;
@@ -735,19 +741,41 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       // appear between the background and the HUD graphics.
       const hudMaskAfter = hudMaskRef.current;
       if (hudMaskAfter) {
-        ctxL.drawImage(hudMaskAfter, 0, 0, canvasElement.width, canvasElement.height);
+        ctxL.drawImage(hudMaskAfter, 0, 0, VIRTUAL_CANVAS_SIZE.width, VIRTUAL_CANVAS_SIZE.height);
       }
 
       if (debugEnabledRef.current) {
         ctxL.save();
         ctxL.fillStyle = '#00ff00';
-        ctxL.font = 'italic 14px PixelOperator8';
+        ctxL.font = 'italic 14px Determination';
         ctxL.textAlign = 'left';
         ctxL.textBaseline = 'top';
         ctxL.fillText('debug_protocol.dll running!', 12, 10);
         ctxL.restore();
       }
 
+    };
+
+    const syncCanvasResolution = (
+      canvasElement: HTMLCanvasElement,
+      ctxL: CanvasRenderingContext2D,
+    ) => {
+      const cssWidth = canvasElement.clientWidth || VIRTUAL_CANVAS_SIZE.width;
+      const cssHeight = canvasElement.clientHeight || VIRTUAL_CANVAS_SIZE.height;
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+
+      const pixelWidth = Math.max(1, Math.round(cssWidth * dpr));
+      const pixelHeight = Math.max(1, Math.round(cssHeight * dpr));
+
+      if (canvasElement.width !== pixelWidth || canvasElement.height !== pixelHeight) {
+        canvasElement.width = pixelWidth;
+        canvasElement.height = pixelHeight;
+      }
+
+      const scaleX = pixelWidth / VIRTUAL_CANVAS_SIZE.width;
+      const scaleY = pixelHeight / VIRTUAL_CANVAS_SIZE.height;
+      ctxL.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+      ctxL.imageSmoothingEnabled = false;
     };
 
     const gameLoop = (time: number) => {
@@ -758,8 +786,9 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       const deltaMs = time - lastTimeRef.current;
       lastTimeRef.current = time;
 
-      update(deltaMs, canvas, time);
-      render(ctx, canvas, time);
+      syncCanvasResolution(canvas, ctx);
+      update(deltaMs, time);
+      render(ctx, time);
 
       animationFrameId = requestAnimationFrame(gameLoop);
     };
@@ -777,8 +806,8 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
 
       <canvas
         ref={canvasRef}
-        width={1200}
-        height={900}
+        width={VIRTUAL_CANVAS_SIZE.width}
+        height={VIRTUAL_CANVAS_SIZE.height}
         style={styles.canvas}
       />
     </div>
@@ -806,9 +835,9 @@ const styles = {
   },
 };
 
-function getBox(canvasElement: HTMLCanvasElement): BoxDimensions {
-  const x = (canvasElement.width - BOX_SIZE.width) / 2;
-  const y = (canvasElement.height - BOX_SIZE.height) / 2;
+function getBox(): BoxDimensions {
+  const x = (VIRTUAL_CANVAS_SIZE.width - BOX_SIZE.width) / 2;
+  const y = (VIRTUAL_CANVAS_SIZE.height - BOX_SIZE.height) / 2;
   return {
     x,
     y,

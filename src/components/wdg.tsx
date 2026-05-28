@@ -7,13 +7,13 @@ const DIALOG_LINES = [
 	'INTERESTING.',
 	'VERY\nINTERESTING.',
 	'IT SEEMS THAT THE CONECTION HAS \nBEEN MADE IN ANOTHER WAY.',
-	'BUT ENOUGH OF \nTALK, YOU MAY WANT TO\nGO FOWARD',
-	"IT'S UP TO YOU TO \nMAKE IT, OR LOSE IT.",
+	'BUT ENOUGH \nTALKING, YOU MAY WANT TO\nGO FOWARD.',
+	"IT'S UP TO YOU TO \nMAKE IT, OR GIVE UP.",
 	'YOU CAN TRY\nHOWEVER YOU WANT.',
 	'THEN, SHALL WE HASTEN?'
 ];
 
-const GIVE_UP_TEXT = 'Then, the world covered in darkness...';
+const GIVE_UP_TEXT = 'Then, the world were covered in darkness...';
 
 interface WdgProps {
 	onRetry: () => void;
@@ -24,6 +24,7 @@ const Wdg: React.FC<WdgProps> = ({ onRetry, onGiveUp }) => {
 	const [lineIndex, setLineIndex] = useState(0);
 	const [mode, setMode] = useState<'dialogue' | 'choice' | 'giveup'>('dialogue');
 	const [typedText, setTypedText] = useState('');
+	const [selectedChoice, setSelectedChoice] = useState<'giveup' | 'retry'>('retry');
 
 	const currentLine = useMemo(() => DIALOG_LINES[lineIndex], [lineIndex]);
 
@@ -43,7 +44,7 @@ const Wdg: React.FC<WdgProps> = ({ onRetry, onGiveUp }) => {
 	useEffect(() => {
 		if (mode !== 'dialogue') return;
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Enter' || event.key === ' ') {
+			if (event.key === 'Enter' || event.key === 'z' || event.key === 'Z') {
 				advance();
 			}
 		};
@@ -81,6 +82,35 @@ const Wdg: React.FC<WdgProps> = ({ onRetry, onGiveUp }) => {
 		onGiveUp();
 	};
 
+	useEffect(() => {
+		if (mode !== 'choice') return;
+
+		const handleChoiceKeyDown = (event: KeyboardEvent) => {
+			if (
+				event.key === 'ArrowLeft' ||
+				event.key === 'ArrowRight' ||
+				event.key === 'ArrowUp' ||
+				event.key === 'ArrowDown'
+			) {
+				event.preventDefault();
+				setSelectedChoice((current) => (current === 'giveup' ? 'retry' : 'giveup'));
+				return;
+			}
+
+			if (event.key === 'Enter' || event.key === 'z' || event.key === 'Z') {
+				event.preventDefault();
+				if (selectedChoice === 'giveup') {
+					handleGiveUp();
+					return;
+				}
+				onRetry();
+			}
+		};
+
+		window.addEventListener('keydown', handleChoiceKeyDown);
+		return () => window.removeEventListener('keydown', handleChoiceKeyDown);
+	}, [mode, onRetry, selectedChoice]);
+
 	if (mode === 'giveup') {
 		return (
 			<div style={styles.giveUpContainer}>
@@ -100,10 +130,26 @@ const Wdg: React.FC<WdgProps> = ({ onRetry, onGiveUp }) => {
 
 			{mode === 'choice' && (
 				<div style={styles.choiceRow}>
-					<button type="button" style={styles.choiceButton} onClick={handleGiveUp}>
+					<button
+						type="button"
+						style={{
+							...styles.choiceButton,
+							color: selectedChoice === 'giveup' ? '#FBFF0D' : '#fff',
+						}}
+						onMouseEnter={() => setSelectedChoice('giveup')}
+						onClick={handleGiveUp}
+					>
 						GIVE UP
 					</button>
-					<button type="button" style={styles.choiceButton} onClick={onRetry}>
+					<button
+						type="button"
+						style={{
+							...styles.choiceButton,
+							color: selectedChoice === 'retry' ? '#FBFF0D' : '#fff',
+						}}
+						onMouseEnter={() => setSelectedChoice('retry')}
+						onClick={onRetry}
+					>
 						RETRY
 					</button>
 				</div>
@@ -148,7 +194,7 @@ const styles = {
 	},
 	choiceButton: {
 		backgroundColor: 'transparent',
-		border: '2px solid #fff',
+		border: 'none',
 		color: '#fff',
 		padding: '10px 14px',
 		fontSize: '16px',
