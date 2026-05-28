@@ -21,61 +21,63 @@ export const createLoopingAudio = (
   audio.volume = 0;
 
   const targetVolume = options.volume ?? 0.6;
-  const fadeInMs = options.fadeInMs ?? 600;
-  const fadeOutMs = options.fadeOutMs ?? 600;
+  // longer, smoother defaults for subtle fades
+  const fadeInMs = options.fadeInMs ?? 1400;
+  const fadeOutMs = options.fadeOutMs ?? 1400;
   const loopStart = options.loopStart ?? 0;
-
-  let fadeInStart = performance.now();
-  let fadeOutStart: number | null = null;
   let stopped = false;
 
-  const step = () => {
-    if (stopped) return;
+  const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // smooth ease in/out
 
-    const now = performance.now();
+  let rafId: number | null = null;
+  let fadeOutRequestedAt: number | null = null;
+  let fadeInStartedAt: number | null = null;
+
+  const tick = (now: number) => {
+    if (stopped) return;
+    // ensure audio metadata loaded
     const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
     const loopEnd = options.loopEnd && options.loopEnd > 0 ? options.loopEnd : duration;
 
-    if (loopEnd && audio.currentTime >= loopEnd - fadeOutMs / 1000) {
-      if (fadeOutStart === null) {
-        fadeOutStart = now;
-      }
+    if (loopEnd && audio.currentTime >= Math.max(0, loopEnd - fadeOutMs / 1000)) {
+      if (fadeOutRequestedAt === null) fadeOutRequestedAt = now;
     }
 
-    if (fadeOutStart !== null) {
-      const t = Math.min(1, (now - fadeOutStart) / fadeOutMs);
-      audio.volume = targetVolume * (1 - t);
+    if (fadeOutRequestedAt !== null) {
+      const t = Math.min(1, (now - fadeOutRequestedAt) / fadeOutMs);
+      const v = targetVolume * (1 - ease(t));
+      audio.volume = Math.max(0, Math.min(1, v));
       if (t >= 1) {
         audio.currentTime = loopStart;
-        fadeOutStart = null;
-        fadeInStart = performance.now();
+        fadeOutRequestedAt = null;
+        fadeInStartedAt = performance.now();
         audio.volume = 0;
       }
-    } else if (fadeInStart) {
-      const t = Math.min(1, (now - fadeInStart) / fadeInMs);
-      audio.volume = targetVolume * t;
-      if (t >= 1) {
-        fadeInStart = 0;
-      }
+    } else if (fadeInStartedAt !== null) {
+      const t = Math.min(1, (now - fadeInStartedAt) / fadeInMs);
+      audio.volume = targetVolume * ease(t);
+      if (t >= 1) fadeInStartedAt = null;
     }
+
+    rafId = window.requestAnimationFrame(tick);
   };
 
-  const intervalId = window.setInterval(step, 50);
-
-  audio.addEventListener('ended', () => {
-    if (stopped) return;
-    audio.currentTime = loopStart;
-    audio.play().catch(() => {});
-  });
-
+  // start playback and smooth fade in
   audio.play().catch(() => {});
+  fadeInStartedAt = performance.now();
+  rafId = window.requestAnimationFrame(tick);
 
   return {
     audio,
     stop: () => {
+      if (stopped) return;
       stopped = true;
-      window.clearInterval(intervalId);
-      audio.pause();
+      if (rafId) window.cancelAnimationFrame(rafId);
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 0;
+      } catch {}
     },
   };
 };

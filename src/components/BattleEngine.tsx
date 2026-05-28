@@ -659,7 +659,7 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
       const tpFontSize = Math.max(10, Math.floor(TP_VALUE_RECT.height * hudScaleY * 1.05));
 
       ctxL.save();
-      ctxL.font = `${tpFontSize}px 8bitoperator`;
+      ctxL.font = `${tpFontSize}px PixelOperator8`;
       ctxL.textAlign = 'center';
       ctxL.textBaseline = 'middle';
       ctxL.strokeStyle = '#000000';
@@ -731,10 +731,17 @@ export const BattleEngine: React.FC<BattleEngineProps> = ({
         }
       }
 
+      // Draw HUD mask on top of game elements so the TP bar/numbers
+      // appear between the background and the HUD graphics.
+      const hudMaskAfter = hudMaskRef.current;
+      if (hudMaskAfter) {
+        ctxL.drawImage(hudMaskAfter, 0, 0, canvasElement.width, canvasElement.height);
+      }
+
       if (debugEnabledRef.current) {
         ctxL.save();
         ctxL.fillStyle = '#00ff00';
-        ctxL.font = 'italic 14px 8bitoperator';
+        ctxL.font = 'italic 14px PixelOperator8';
         ctxL.textAlign = 'left';
         ctxL.textBaseline = 'top';
         ctxL.fillText('debug_protocol.dll running!', 12, 10);

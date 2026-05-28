@@ -124,7 +124,7 @@ const styles = {
 		backgroundColor: '#000',
 		color: '#fff',
 		textAlign: 'center' as const,
-		letterSpacing: '2px',
+		letterSpacing: '0.5px',
 		cursor: 'pointer',
 	},
 	heart: {
@@ -152,7 +152,7 @@ const styles = {
 		color: '#fff',
 		padding: '10px 14px',
 		fontSize: '16px',
-		letterSpacing: '2px',
+		letterSpacing: '0.5px',
 		cursor: 'pointer',
 	},
 	giveUpContainer: {
@@ -165,7 +165,7 @@ const styles = {
 	},
 	giveUpText: {
 		fontSize: '18px',
-		letterSpacing: '2px',
+		letterSpacing: '0.5px',
 	},
 };
 

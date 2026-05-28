@@ -129,7 +129,7 @@ const styles = {
     margin: 0,
     fontSize: '22px',
     textTransform: 'uppercase' as const,
-    letterSpacing: '1px',
+    letterSpacing: '0.5px',
   },
   group: {
     display: 'grid',
@@ -140,7 +140,7 @@ const styles = {
   label: {
     fontSize: '12px',
     textTransform: 'uppercase' as const,
-    letterSpacing: '1px',
+    letterSpacing: '0.5px',
     color: '#9efc6d',
   },
   range: {

@@ -97,7 +97,8 @@ const styles = {
 	},
 	text: {
 		fontSize: '18px',
-		letterSpacing: '2px',
+		letterSpacing: '0.5px',
+		color: '#00ff00',
 	},
 };
 
