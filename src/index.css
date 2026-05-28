@@ -1,0 +1,27 @@
+@font-face {
+	font-family: '8bitoperator';
+	src: url('./fonts/8bitoperator_jve.ttf') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	font-family: '8bitoperator', monospace;
+	background-color: #000;
+	color: #fff;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	font-family: '8bitoperator', monospace;
+	background-color: #000;
+	color: #fff;
+}
+
+button,
+select,
+input {
+	font-family: inherit;
+}
