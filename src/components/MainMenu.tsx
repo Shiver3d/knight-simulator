@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TRACK_ID, tracks } from './music';
-import { playSelectSound } from './sfx';
+import { playLancerSplat, playSelectSound } from './sfx';
 import { createLoopingAudio } from './loopingAudio';
 import soulCursor from '../assets/spriteResources/SOUL1.png';
+import lancerDig from '../assets/spriteResources/lancerDig.png';
 
 interface MainMenuProps {
 	onStart: (options: { trackId: string; scene: 1 | 2; slotIndex: number }) => void;
@@ -15,6 +16,8 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStart, onDebugOpen }) => {
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [selectedTrackId, setSelectedTrackId] = useState(DEFAULT_TRACK_ID);
 	const [scene, setScene] = useState<1 | 2>(1);
+	const [lancerClicked, setLancerClicked] = useState(false);
+	const [lancerHovered, setLancerHovered] = useState(false);
 	const menuMusicRef = useRef<ReturnType<typeof createLoopingAudio> | null>(null);
 	const konamiIndexRef = useRef(0);
 
@@ -194,7 +197,27 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStart, onDebugOpen }) => {
 					</div>
 				</div>
 
-				<div style={styles.alphaLabel}>ALPHA</div>
+				<div style={styles.alphaLabelWrap}>
+					{lancerClicked ? <div style={styles.lancerFeedback}>...</div> : null}
+					<button
+						type="button"
+						aria-label="Lancer easter egg"
+						style={{
+							...styles.lancerButton,
+							opacity: lancerHovered ? 1 : 0,
+						}}
+						onMouseEnter={() => setLancerHovered(true)}
+						onMouseLeave={() => setLancerHovered(false)}
+						onClick={() => {
+							setLancerClicked(true);
+							playLancerSplat();
+							window.setTimeout(() => setLancerClicked(false), 300);
+						}}
+					>
+						<img src={lancerDig} alt="" style={styles.lancerSprite} />
+					</button>
+					<div style={styles.alphaLabel}>ALPHA</div>
+				</div>
 			</div>
 		</div>
 	);
@@ -309,10 +332,36 @@ const styles = {
 		fontSize: '22px',
 	},
 	alphaLabel: {
+		fontSize: '16px',
+	},
+	alphaLabelWrap: {
 		position: 'absolute' as const,
 		right: '20px',
 		bottom: '12px',
-		fontSize: '16px',
+		display: 'flex',
+		flexDirection: 'column' as const,
+		alignItems: 'flex-end',
+		gap: '4px',
+	},
+	lancerButton: {
+		border: 'none',
+		backgroundColor: 'transparent',
+		padding: 0,
+		cursor: 'pointer',
+		lineHeight: 0,
+		transition: 'opacity 120ms ease-out',
+	},
+	lancerSprite: {
+		width: '82px',
+		height: '82px',
+		objectFit: 'contain' as const,
+		imageRendering: 'pixelated' as const,
+		pointerEvents: 'none' as const,
+	},
+	lancerFeedback: {
+		fontSize: '12px',
+		color: '#FBFF0D',
+		marginRight: '4px',
 	},
 };
 
